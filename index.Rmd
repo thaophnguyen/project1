@@ -19,68 +19,226 @@ tidy=TRUE, tidy.opts=list(width.cutoff=60), R.options=list(max.print=100))
 
 ## Data Wrangling, Exploration, Visualization
 
-### Name and EID here
+### Thao Nguyen, tpn433
 
-#### Introduction 
+## Introduction 
 
-Paragraph or two introducing your datasets and variables, why they are interesting to you, etc.
+The three datasets that I am using were all downloaded on November 1, 2021 from IMDb, which is an online database of information related to films, television programs, home videos, video games, and streaming content online. I chose to focus on just TV shows and episodes associated with those shows. The first dataset is what I will call `basics` and contains basic information about all the titles on IMDb, each with a unique title ID, including variables such as the type, or format, of the title, start and end year, runtime in minutes, and genres associated with that title. The next dataset is the `ratings` dataset, which contains the variables average rating and number of votes/ratings linked to the same unique title IDs as `basics`. The last dataset is `episode`, which contains basic TV episode information, including the variables season number, episode number, and the unique title ID of the show that each episode belongs to. 
 
 ```{R}
-# read your datasets in here, e.g., with read_csv()
+library(tidyverse)
+library(gt)
+library(ggplot2)
 
+basics_init <- read_tsv('https://datasets.imdbws.com/title.basics.tsv.gz') 
+ratings_init <- read_csv('https://datasets.imdbws.com/title.ratings.tsv.gz')
+episode_init <- read_tsv('https://datasets.imdbws.com/title.episode.tsv.gz')
 ```
 
-#### Tidying: Reshaping
+## Tidying: Reshaping
 
-If your datasets are tidy already, demonstrate that you can reshape data with pivot wider/longer here (e.g., untidy and then retidy). Alternatively, it may be easier to wait until the wrangling section so you can reshape your summary statistics. Note here if you are going to do this.
+Reshaping using pivot in wrangling section!
 
 ```{R}
-# your tidying code (if applicable; can also wait until wrangling section)
+ratings_tidy <- ratings_init %>%
+  separate(`tconst	averageRating	numVotes`, into = c('id', 'avgRating', 'numVotes'), sep = '\\s')
+
+basics_tidy <- basics_init %>% 
+  rename('id' = 1, 'type' = 2, 'title' = 3, 'startYear' = 6, 'endYear' = 7, 'runtime' = 8)
+
+episode_tidy <- episode_init %>%
+  rename('id' = 1, 'showId' = 2, 'seasonNum' = 3, 'epNum' = 4)
+
+basics_tidy2 <- basics_tidy %>% select(id, title) %>% rename('showId' = 1)
 ```
 
     
-#### Joining/Merging
+## Joining/Merging
 
 ```{R}
-# your joining code
+basics_tidy %>%
+  summarise(n = n())
+basics_tidy %>%
+  summarise(n_distinct(id))
+ratings_tidy %>%
+  summarise(n = n())
+ratings_tidy %>%
+  summarise(n_distinct(id))
+episode_tidy %>%
+  summarise(n = n())
+episode_tidy %>%
+  summarise(n_distinct(id))
 
-# your joining code
+join1 <- basics_tidy %>% right_join(ratings_tidy, by = 'id')
+join1 %>%
+  summarise(n = n())
+join1 %>%
+  summarise(n_distinct(id))
+
+join2 <- join1 %>% left_join(episode_tidy, by = 'id')
+join2 %>%
+  summarise(n = n())
+join2 %>%
+  summarise(n_distinct(id))
+
+join3 <- join2 %>% left_join(basics_tidy2, by = 'showId')
+join3 %>%
+  summarise(n = n())
+join3 %>%
+  summarise(n_distinct(id))
+
+
+
+
+# tv2 <- basics_ratings_join %>% left_join(episode_tidy, by = 'id')
+# tv2 <- tv2 %>% left_join(basics_tidy2, by = 'showId')
 ```
 
-Discussions of joining here. Feel encouraged to break up into more than once code chunk and discuss each in turn.
+Initially, the `basics` dataset had 6,779,276	observations, the `ratings` data set had 1,199,063 observations, and the `episode` dataset had 6,137,684 observations. For each of these datasets, the number of total observations was the same as the number of unique IDs. 
 
-####  Wrangling
+I first right-joined the `basics` and `ratings` datasets, since the `basics` dataset contains all of titles on IMDB, while `ratings` contains all of the titles that have been reviewed. By right-joining, I dropped all observations with titles with no reviews. The resulting dataset had 1,199,063 observations, the same as the original `ratings` dataset, showing that all the the IDs in `ratings` appeared in `basics` while the dropped 5,580,213 observations appeared only in `basics` but not `ratings`.
+
+I then left-joined the resulting `basics_ratings_join` dataset with the `episodes` dataset to add information for all observations in `basics_ratings_join` that were also categorized as TV episodes while again, dropping the `episodes` observations with no reviews. The resulting dataset also had 1,199,063 observations, showing that all the the IDs in `episodes` appeared in `ratings` and therefore also in  `basics_ratings_join`while the dropped 4,938,621 observations appeared only in `episodes` but not `ratings` and therefore not in `basics_ratings_join`.
+
+Lastly, I left-joined the resulting dataset with the 'title' and 'show_id' variable from the `basics` dataset so that the show title variable would be added to the final joined dataset so that it was easier to see which show an observation categorized as a TV episode belonged to. The resulting dataset also had 1,199,063 observations.
+
+##  Wrangling
 
 ```{R}
-# your wrangling code
+tv <- join3 %>% 
+  filter(type == 'tvSeries' | type == 'tvEpisode') %>%
+  filter(isAdult == 0) %>% 
+  select(-originalTitle,-isAdult) %>%
+  rename('title' = 'title.x', 'showTitle' = 'title.y') %>% 
+  relocate(showTitle, .after = showId) %>%
+  mutate_all(funs(str_replace(., "\\\\N", NA_character_)))
 
-# your wrangling code
+cols_num <- c(4:6, 8:9, 12:13)
+tv[cols_num] <- sapply(tv[cols_num], as.numeric)
 
-# your wrangling code
+skew <- function(x, na.rm = F){
+  1/(length(x)) * sum((x-mean(x))^3) / var(x)^(3/2)
+}
+
+num_summary1 <- tv %>%
+  filter(type == 'tvEpisode') %>%
+  filter(!is.na(showTitle)) %>%
+  select(runtime, avgRating, numVotes, startYear) %>%
+  summarise_each(funs(var(., na.rm = T), mean(., na.rm = T), median(., na.rm = T), sd(., na.rm = T), min(., na.rm = T), max(., na.rm = T), skew))
+
+num_summary1_tidy <- num_summary1 %>% 
+  pivot_longer(1:24) %>% 
+  separate(name, into = c('variable', 'stat'), sep = '_') %>% 
+  pivot_wider(names_from = 'stat', values_from = 'value')
+
+num_sum1_gt <- gt(num_summary1_tidy) %>%
+  tab_header(title = 'Summary Statistics', subtitle = 'Numeric Variables for TV Episodes') %>%
+  cols_align(align = 'center', columns = everything())
+num_sum1_gt
+
+num_summary2 <- tv %>%
+  filter(type == 'tvSeries') %>%
+  select(runtime, avgRating, numVotes, startYear) %>%
+  summarise_each(funs(var(., na.rm = T), mean(., na.rm = T), median(., na.rm = T), sd(., na.rm = T), min(., na.rm = T), max(., na.rm = T), skew))
+
+num_summary2_tidy <- num_summary2 %>% 
+  pivot_longer(1:24) %>% 
+  separate(name, into = c('variable', 'stat'), sep = '_') %>% 
+  pivot_wider(names_from = 'stat', values_from = 'value')
+
+num_sum2_gt <- gt(num_summary2_tidy) %>%
+  tab_header(title = 'Summary Statistics', subtitle = 'Numeric Variables for TV Series') %>%
+  cols_align(align = 'center', columns = everything())
+num_sum2_gt
+
+tv_sep <- tv %>% separate_rows(genres, sep = ',')
+
+cat_summary1 <- tv_sep %>%
+  filter(type == 'tvEpisode') %>%
+  filter(!is.na(showTitle)) %>%
+  group_by(genres) %>%
+  summarise(nGenres = n()) %>%
+  arrange(desc(nGenres)) %>%
+  mutate(freq_genre = nGenres / 504588)
+head(cat_summary1)
+
+cat_summary2 <- tv %>%
+  filter(type == 'tvEpisode') %>%
+  filter(!is.na(showTitle)) %>%
+  group_by(showId, showTitle) %>%
+  summarise(nShow = n()) %>%
+  arrange(desc(nShow))
+head(cat_summary2)
+
+num_na <- tv %>%
+  summarise_all(funs(sum(is.na(.))))
+
+num_na_tidy <- num_na %>% 
+  pivot_longer(1:13) %>% 
+  separate(name, into = c('variable', 'stat'), sep = '_') %>% 
+  pivot_wider(names_from = 'stat', values_from = 'value')
+num_na_tidy
 ```
 
-Your discussion of wrangling section here. Feel encouraged to break up into more than once code chunk and discuss each in turn.
+Since I only wanted to work with TV series and episodes, I overwrote the `tv` dataset that resulted from joining the three initial datasets to remove any observations not categorized as a TV series or TV episode, as well as any adult content. I didn't need the originalTitle or isAdult variables anymore, since all the resulting observations were non-adult titles, so I removed those columns as well. The initial data contained “\N” for missing values and only character types, so I changed all cases of “\N” to “NA” using a stringr function inside of mutate() and variables containing numbers from character to numeric. 
 
+For the numeric variables, I created two different summary statistic tables, one for TV episodes and one for TV series. First, I wrote a function to calculate skew. Each table showed the variance, mean, median, standard deviation, minimum, maximum, and skew for the variables runtime, avgRating, numVotes, and startYear. Both of these tables were reshaped and tidied using pivot_longer(), separate(), and pivot_wider() and were styled using the `gt` package. The average rating for TV episodes was found to be 7.37 out of 10, while the average rating for TV shows was found to be 6.78 out of 10. The mean start year (or year aired for TV episodes) was 2007 for TV episodes and 2005 for TV shows. The `tv` dataset had multiple genres for each title, so I used separate_rows() in order to analyze by genre. For the first categorical variable table, I used this new separated dataset, `tv_sep`, to find the number of TV episodes associated with each genre and then divided those numbers by 504,588, the number of total episodes in the `tv` dataset before creating new observations to analyze genre, to determine the frequency of each genre. Romance was the genre with the most episodes associated with it, 25,080 episodes, while Western had the least, 909 episodes. For the second categorical variable table, I used only TV episodes that had a show name associated with it and grouped by both showId and showTitle to determine the number of episodes each show had. In the dataset, it was determined that The Daily Show had the most episodes, 2888 episodes, while many shows had only 1 episode. Lastly, I found the number of NA’s in each variable and reshaped and tidied that table. 
 
-#### Visualizing
+## Visualizing
 
 ```{R}
-# your plot 1
+tv %>%
+  filter(type == 'tvSeries', numVotes >= 5000) %>%
+  ggplot(aes(x = avgRating)) + 
+    geom_histogram(aes(y=..density..), color = 'white', fill = 'light blue') + 
+    geom_density(color = 'blue') +
+    geom_vline(aes(xintercept = mean(avgRating), color = 'Mean'), linetype = 'dashed') +
+    geom_vline(aes(xintercept = median(avgRating), color = 'Median'), linetype = 'dashed') +
+    ggtitle('Distribution of Popular TV Show Ratings') +
+    xlab('TV Show Rating') +
+    ylab('Density') +
+    scale_x_continuous(breaks = seq(0, 10, .5)) +
+    scale_y_continuous(breaks = seq(0, .5, .1)) +
+    scale_color_manual(name = 'Statistics', values = c(Mean = 'red', Median = 'orange')) +
+    theme_light()
 ```
 
-Your discussion of plot 1
+This plot depicts the distribution of ratings using a density plot overlaid on a histogram. It can be seen through the histogram of ratings that they are somewhat negatively skewed. For this graph, I used used only popular TV shows, those with at least 5,000 ratings. The distribution is shown to be much more concentrated in the 6–9 range. The mean and median ratings are both around 7.5, which is also the most common rating.
 
 ```{R}
-# your plot 2
+tv_sep %>% 
+  filter(type == 'tvSeries', numVotes >= 5000, genres == 'Comedy' | genres == 'Drama' | genres == 'Animation' | genres == 'Action' | genres == 'Adventure' | genres == 'Crime' | genres == 'Documentary' | genres == 'Reality-TV' | genres == 'Family' | genres == 'Romance') %>% 
+  group_by(genres, startYear) %>% 
+  summarise(n = n()) %>%
+  ggplot(aes(x = startYear, y = n, color = genres)) +
+    geom_point() +
+    geom_smooth(se = F) +
+    ggtitle('Number of Shows Per Genre Over Time') +
+    xlab('TV Show Start Year') +
+    ylab('Number of Shows') +
+    scale_x_continuous(breaks = seq(1920, 2020, 10)) +
+    labs(color = 'Genre') +
+    theme_light()
 ```
 
-Your discussion of plot 2
+This graph shows the number of new shows per year over time. For this graph, I showed only the top ten most popular genres of all time according to `cat_summary1` to avoid the plot being too convoluted. Among the most popular shows (with at least 5,000 ratings), there is a positive relationship between number of new shows and year for every genre. Comedy shows are shown to have only just barely begin to plateau in recent years, animation shows are shown to have started to drop off around 2005, and reality-TV shows are shown to have started their decline around 2015. The number of drama shows surpassed comedy as the most popular genre around 2005.
 
 ```{R}
-# your plot 3
+tv_sep %>% 
+  filter(type == 'tvSeries', numVotes >= 5000, genres == 'Comedy' | genres == 'Drama' | genres == 'Animation' | genres == 'Action' | genres == 'Adventure' | genres == 'Crime' | genres == 'Documentary' | genres == 'Reality-TV' | genres == 'Family' | genres == 'Romance') %>% 
+  ggplot(aes(x = genres, y = avgRating)) +
+    geom_bar(aes(fill = genres), stat = "summary", fun = mean) +
+    geom_errorbar(stat = "summary", fun.data = mean_se) +
+    ggtitle('Average Rating by Genre') +
+    xlab('Genre') +
+    ylab('Average Rating') +
+    scale_y_continuous(breaks = seq(0, 10, .5)) +
+    labs(fill = 'Genre') +
+    theme_light() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1), legend.position = 'none')
 ```
 
-Your discussion of plot 3
+This bar graph takes the most popular TV shows (at least 5,000 reviews) and the top ten most popular genres and depicts the relationship between average show rating and genre. From this plot, it can be seen that documentary shows are the most highly rated on average, while reality-TV shows are the worst rated on average.
 
 #### Concluding Remarks
 
