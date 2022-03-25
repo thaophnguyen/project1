@@ -19,7 +19,7 @@ tidy=TRUE, tidy.opts=list(width.cutoff=60), R.options=list(max.print=100))
 
 ## Data Wrangling, Exploration, Visualization
 
-### Thao Nguyen, tpn433
+### Thao Nguyen
 
 ## Introduction 
 
