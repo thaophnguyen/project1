@@ -1,6 +1,6 @@
 ---
 title: 'Project 1: Wrangling, Exploration, Visualization'
-author: "SDS322E"
+author: "Elements of Data Science Fall 2021"
 date: ''
 output:
   html_document:
@@ -87,11 +87,6 @@ join3 %>%
 join3 %>%
   summarise(n_distinct(id))
 
-
-
-
-# tv2 <- basics_ratings_join %>% left_join(episode_tidy, by = 'id')
-# tv2 <- tv2 %>% left_join(basics_tidy2, by = 'showId')
 ```
 
 Initially, the `basics` dataset had 6,779,276	observations, the `ratings` data set had 1,199,063 observations, and the `episode` dataset had 6,137,684 observations. For each of these datasets, the number of total observations was the same as the number of unique IDs. 
@@ -239,11 +234,5 @@ tv_sep %>%
 ```
 
 This bar graph takes the most popular TV shows (at least 5,000 reviews) and the top ten most popular genres and depicts the relationship between average show rating and genre. From this plot, it can be seen that documentary shows are the most highly rated on average, while reality-TV shows are the worst rated on average.
-
-#### Concluding Remarks
-
-If any!
-
-
 
 
